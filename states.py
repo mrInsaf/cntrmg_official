@@ -34,8 +34,12 @@ class TrackOrder(StatesGroup):
     track_order = State()
 
 class CheckStatus(StatesGroup):
+    start = State()
     input_fio = State()
     input_order_number = State()
+
+class CheckAvailability(StatesGroup):
+    start = State()
 
 
 class HowToSearch(StatesGroup):

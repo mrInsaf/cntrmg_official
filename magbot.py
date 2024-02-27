@@ -27,6 +27,8 @@ dp = Dispatcher()
 @dp.callback_query(Login.input_login, F.data == "back")
 @dp.callback_query(MakeOrder.choose_product, F.data == "back")
 @dp.callback_query(TrackOrder.choose_order, F.data == "back")
+@dp.callback_query(CheckAvailability.start, F.data == "back")
+@dp.callback_query(CheckStatus.start, F.data == "back")
 @dp.callback_query(AskQuestion.start, F.data == "back")
 @dp.callback_query(CreateAccount.get_name_and_surname,
                    F.data == "back")
@@ -393,7 +395,7 @@ async def check_status(callback: CallbackQuery, state: FSMContext):
     kb.adjust(1)
     await callback.message.answer(text="Укажите номер заказа или ФИО, на кого оформлен заказ",
                                   reply_markup=kb.as_markup())
-    await state.set_state(Misc.misc)
+    await state.set_state(CheckStatus.start)
 
 
 @dp.callback_query(CheckStatus.input_order_number, F.data == "back")
@@ -424,7 +426,7 @@ async def input_fio(callback: CallbackQuery, state: FSMContext):
 async def check_availability(callback: CallbackQuery, state: FSMContext):
     kb = create_kb()
     await callback.message.answer("Введите артикул товара", reply_markup=kb.as_markup())
-    await state.set_state(Misc.misc)
+    await state.set_state(CheckAvailability.start)
 
 
 @dp.callback_query(F.data == "how to search")
