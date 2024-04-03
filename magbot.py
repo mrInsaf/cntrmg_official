@@ -19,7 +19,7 @@ from texts import *
 
 # test - 6748840687:AAEah69Bw4LUvpc43bcGA_Hr19_u98TZiJo
 # production - 6565334685:AAFMrkMnbIAB_x8DjHx9494idO8N0qCcoAs
-TOKEN = '6565334685:AAFMrkMnbIAB_x8DjHx9494idO8N0qCcoAs'
+TOKEN = '6748840687:AAEah69Bw4LUvpc43bcGA_Hr19_u98TZiJo'
 
 dp = Dispatcher()
 
@@ -426,7 +426,7 @@ async def ask_question_start(callback: CallbackQuery, state: FSMContext):
         InlineKeyboardButton(text="Задать другой вопрос", callback_data="ask another question"),
     )
     kb.adjust(1)
-    await callback.message.answer(text="Выберите интересующую тему", reply_markup=kb.as_markup())
+    await callback.message.answer(text="Введите свой вопрос или выберите из списка", reply_markup=kb.as_markup())
     await state.set_state(AskQuestion.start)
 
 
