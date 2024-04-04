@@ -12,6 +12,7 @@ from aiogram import F
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.methods.send_message import SendMessage
 
+from openai_api import get_openai_response
 from states import *
 from db import *
 from texts import *
@@ -428,6 +429,13 @@ async def ask_question_start(callback: CallbackQuery, state: FSMContext):
     kb.adjust(1)
     await callback.message.answer(text="Введите свой вопрос или выберите из списка", reply_markup=kb.as_markup())
     await state.set_state(AskQuestion.start)
+
+
+@dp.message(AskQuestion.start)
+async def ask_openai(message: Message, state: FSMContext):
+    question = message.text
+    response = await get_openai_response(question)
+    await message.answer(response)
 
 
 @dp.callback_query(F.data == "how to order")
