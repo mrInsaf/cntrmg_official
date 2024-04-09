@@ -50,7 +50,7 @@ async def start_command(callback: types.CallbackQuery, state: FSMContext):
     cart = InlineKeyboardButton(text="Корзина", callback_data="cart")
     ask_question = InlineKeyboardButton(text="Задать вопрос", callback_data="ask question")
 
-    authorised_buttons = [create_order_button, track_order_button, check_status, check_availability, cart,
+    authorised_buttons = [create_order_button, check_status, check_availability, cart,
                           ask_question, get_contacts]
     for button in authorised_buttons:
         kb.add(button)
@@ -73,7 +73,7 @@ async def start_command(message: types.Message, state: FSMContext):
     cart = InlineKeyboardButton(text="Корзина", callback_data="cart")
     ask_question = InlineKeyboardButton(text="Задать вопрос", callback_data="ask question")
 
-    authorised_buttons = [create_order_button, track_order_button, check_status, check_availability, cart,
+    authorised_buttons = [create_order_button, check_status, check_availability, cart,
                           ask_question, get_contacts]
     for button in authorised_buttons:
         kb.add(button)
