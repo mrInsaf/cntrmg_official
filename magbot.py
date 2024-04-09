@@ -39,7 +39,14 @@ bot = Bot(TOKEN, parse_mode=ParseMode.HTML)
                    F.data == "back")
 async def start_command(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    print(f"data: {data}")
+    try:
+        print(data['user_cart'])
+        print(data['user_auth'])
+    except Exception as ex:
+        print("Создал новую корзину")
+        await state.update_data(user_cart=[])
+        await state.update_data(user_auth=False)
+
     await state.set_state(StartState.start_state)
     kb = InlineKeyboardBuilder()
     kb.adjust(1)
@@ -66,9 +73,12 @@ async def start_command(message: types.Message, state: FSMContext):
     data = await state.get_data()
     try:
         print(data['user_cart'])
+        print(data['user_auth'])
     except Exception as ex:
         print("Создал новую корзину")
         await state.update_data(user_cart=[])
+        await state.update_data(user_auth=False)
+
     await state.set_state(StartState.start_state)
     kb = InlineKeyboardBuilder()
     kb.adjust(1)
@@ -135,26 +145,6 @@ async def check_status(callback: CallbackQuery, state: FSMContext):
     await callback.message.answer(text="Укажите ФИО, на кого оформлен заказ",
                                   reply_markup=kb.as_markup())
     await state.set_state(CheckStatus.start)
-
-
-# @dp.message(CheckStatus.start)
-# async def input_order_number(message: Message, state: FSMContext):
-#     kb = create_kb()
-#     if not bool(re.search(r'[^a-zA-Z\sа-яА-Я]', message.text)):
-#         await message.answer("Введите номер заказа", reply_markup=kb.as_markup())
-#         await state.update_data(fio=message.text)
-#         await state.set_state(CheckStatus.input_order_number)
-#     else:
-#         await message.answer("Введены некорректные данные", reply_markup=kb.as_markup())
-#
-#
-# @dp.callback_query(CheckStatus.input_order_number, F.data == "back")
-# async def back_to_input_fio(callback: CallbackQuery, state: FSMContext):
-#     await check_status(callback, state)
-#
-#
-# @dp.message(CheckStatus.input_order_number)
-# async def check_status_choose_order(message: Message, state: FSMContext):
 
 
 
@@ -241,8 +231,16 @@ async def cart_start(callback: CallbackQuery, state: FSMContext):
     base_str = 'Ваша корзина:'
     data = await state.get_data()
     user_cart = data['user_cart']
+
     for item in user_cart:
         base_str += f'\n<b>{item["item_name"]}</b> - <b>{item["item_quantity"]} шт</b>'
+
+    if not data['user_auth']:
+        auth_button = InlineKeyboardButton(text="Авторизоваться", callback_data="auth")
+        kb.add(auth_button)
+        kb.adjust(1)
+        base_str += "\n Чтобы оформить заказ необходима авторизация"
+
     await callback.message.answer(text=base_str, reply_markup=kb.as_markup())
     await state.set_state(Cart.start)
 
