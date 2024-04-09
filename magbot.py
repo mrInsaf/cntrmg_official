@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 import sys
 from aiogram import Bot, Dispatcher, Router, types
 from aiogram.enums import ParseMode
@@ -26,8 +27,6 @@ TOKEN = '6748840687:AAEah69Bw4LUvpc43bcGA_Hr19_u98TZiJo'
 dp = Dispatcher()
 bot = Bot(TOKEN, parse_mode=ParseMode.HTML)
 
-user_cart = []
-
 
 @dp.callback_query(Login.input_login, F.data == "back")
 @dp.callback_query(MakeOrder.choose_product, F.data == "back")
@@ -39,11 +38,13 @@ user_cart = []
 @dp.callback_query(CreateAccount.get_name_and_surname,
                    F.data == "back")
 async def start_command(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    print(f"data: {data}")
     await state.set_state(StartState.start_state)
     kb = InlineKeyboardBuilder()
     kb.adjust(1)
 
-    create_order_button = InlineKeyboardButton(text="Создать заказ", callback_data="create order")
+    create_order_button = InlineKeyboardButton(text="Посмотреть каталог", callback_data="create order")
     get_contacts = InlineKeyboardButton(text="Контакты", callback_data="get contacts")
     check_status = InlineKeyboardButton(text="Узнать статус заказа", callback_data="check status")
     check_availability = InlineKeyboardButton(text="Узнать наличие", callback_data="check availability")
@@ -62,11 +63,17 @@ async def start_command(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.message(Command('start'))
 async def start_command(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    try:
+        print(data['user_cart'])
+    except Exception as ex:
+        print("Создал новую корзину")
+        await state.update_data(user_cart=[])
     await state.set_state(StartState.start_state)
     kb = InlineKeyboardBuilder()
     kb.adjust(1)
 
-    create_order_button = InlineKeyboardButton(text="Создать заказ", callback_data="create order")
+    create_order_button = InlineKeyboardButton(text="Посмотреть каталог", callback_data="create order")
     get_contacts = InlineKeyboardButton(text="Контакты", callback_data="get contacts")
     check_status = InlineKeyboardButton(text="Узнать статус заказа", callback_data="check status")
     check_availability = InlineKeyboardButton(text="Узнать наличие", callback_data="check availability")
@@ -121,41 +128,34 @@ async def create_order(callback: CallbackQuery, state: FSMContext):
     await state.set_state(MakeOrder.choose_product)
 
 
+@dp.callback_query(CheckStatus.input_order_number, F.data == "back")
 @dp.callback_query(F.data == "check status")
 async def check_status(callback: CallbackQuery, state: FSMContext):
     kb = create_kb()
-    order_number = InlineKeyboardButton(text="Указать номер заказа", callback_data="input order number")
-    fio = InlineKeyboardButton(text="Указать ФИО", callback_data="input fio")
-    kb.add(order_number)
-    kb.add(fio)
-    kb.adjust(1)
-    await callback.message.answer(text="Укажите номер заказа или ФИО, на кого оформлен заказ",
+    await callback.message.answer(text="Укажите ФИО, на кого оформлен заказ",
                                   reply_markup=kb.as_markup())
     await state.set_state(CheckStatus.start)
 
 
-@dp.callback_query(CheckStatus.input_order_number, F.data == "back")
-async def back_to_check_status(callback: CallbackQuery, state: FSMContext):
-    await check_status(callback, state)
+# @dp.message(CheckStatus.start)
+# async def input_order_number(message: Message, state: FSMContext):
+#     kb = create_kb()
+#     if not bool(re.search(r'[^a-zA-Z\sа-яА-Я]', message.text)):
+#         await message.answer("Введите номер заказа", reply_markup=kb.as_markup())
+#         await state.update_data(fio=message.text)
+#         await state.set_state(CheckStatus.input_order_number)
+#     else:
+#         await message.answer("Введены некорректные данные", reply_markup=kb.as_markup())
+#
+#
+# @dp.callback_query(CheckStatus.input_order_number, F.data == "back")
+# async def back_to_input_fio(callback: CallbackQuery, state: FSMContext):
+#     await check_status(callback, state)
+#
+#
+# @dp.message(CheckStatus.input_order_number)
+# async def check_status_choose_order(message: Message, state: FSMContext):
 
-
-@dp.callback_query(CheckStatus.input_fio, F.data == "back")
-async def back_to_check_status(callback: CallbackQuery, state: FSMContext):
-    await check_status(callback, state)
-
-
-@dp.callback_query(F.data == "input order number")
-async def input_order_number(callback: CallbackQuery, state: FSMContext):
-    kb = create_kb()
-    await callback.message.answer("Введите номер заказа", reply_markup=kb.as_markup())
-    await state.set_state(CheckStatus.input_order_number)
-
-
-@dp.callback_query(F.data == "input fio")
-async def input_fio(callback: CallbackQuery, state: FSMContext):
-    kb = create_kb()
-    await callback.message.answer("Введите ФИО", reply_markup=kb.as_markup())
-    await state.set_state(CheckStatus.input_fio)
 
 
 @dp.callback_query(F.data == "check availability")
@@ -218,12 +218,16 @@ async def check_availability_choose_quantity(message: Message, state: FSMContext
             InlineKeyboardButton(text="В корзину", callback_data="cart"),
         )
         kb.adjust(1)
-        user_cart.append(
+
+        data['user_cart'].append(
             {'item_id': data['item_id'],
              'item_name': data['item_name'],
              'item_quantity': int(message.text)
              })
-        print(user_cart)
+        updated_cart = data['user_cart']
+        await state.update_data(user_cart=updated_cart)
+        data_2 = await state.get_data()
+        print(data_2['user_cart'])
         await message.answer(text=f"Товар <b>{data['item_name']}</b> добавлен в корзину в количестве <b>{message.text}</b> шт.",
                              reply_markup=kb.as_markup())
         await state.set_state(CheckAvailability.choose_quantity)
@@ -235,6 +239,8 @@ async def check_availability_choose_quantity(message: Message, state: FSMContext
 async def cart_start(callback: CallbackQuery, state: FSMContext):
     kb = create_kb()
     base_str = 'Ваша корзина:'
+    data = await state.get_data()
+    user_cart = data['user_cart']
     for item in user_cart:
         base_str += f'\n<b>{item["item_name"]}</b> - <b>{item["item_quantity"]} шт</b>'
     await callback.message.answer(text=base_str, reply_markup=kb.as_markup())
