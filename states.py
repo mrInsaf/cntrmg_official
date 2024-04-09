@@ -33,13 +33,17 @@ class TrackOrder(StatesGroup):
     choose_order = State()
     track_order = State()
 
+
 class CheckStatus(StatesGroup):
     start = State()
     input_fio = State()
     input_order_number = State()
 
+
 class CheckAvailability(StatesGroup):
     start = State()
+    add_to_cart = State()
+    choose_quantity = State()
 
 
 class HowToSearch(StatesGroup):
@@ -60,9 +64,13 @@ class PaymentMethods(StatesGroup):
     method = State()
 
 
+class Cart(StatesGroup):
+    start = State()
+
+
 class Misc(StatesGroup):
     misc = State()
 
+
 class AskQuestion(StatesGroup):
     start = State()
-

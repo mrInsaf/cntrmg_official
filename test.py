@@ -1,2 +1,2 @@
-from db import *
+from db_old import *
 from texts import *

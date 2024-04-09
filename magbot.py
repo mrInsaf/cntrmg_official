@@ -4,6 +4,7 @@ import sys
 from aiogram import Bot, Dispatcher, Router, types
 from aiogram.enums import ParseMode
 from aiogram.filters import Command
+from aiogram.methods import send_photo
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardButton, KeyboardButton, InlineKeyboardMarkup, CallbackQuery, ReplyKeyboardMarkup
@@ -14,21 +15,25 @@ from aiogram.methods.send_message import SendMessage
 
 from openai_api import get_openai_response
 from states import *
+from db_old import *
 from db import *
 from texts import *
 
-
 # test - 6748840687:AAEah69Bw4LUvpc43bcGA_Hr19_u98TZiJo
 # production - 6565334685:AAFMrkMnbIAB_x8DjHx9494idO8N0qCcoAs
-TOKEN = '6565334685:AAFMrkMnbIAB_x8DjHx9494idO8N0qCcoAs'
+TOKEN = '6748840687:AAEah69Bw4LUvpc43bcGA_Hr19_u98TZiJo'
 
 dp = Dispatcher()
+bot = Bot(TOKEN, parse_mode=ParseMode.HTML)
+
+user_cart = []
 
 
 @dp.callback_query(Login.input_login, F.data == "back")
 @dp.callback_query(MakeOrder.choose_product, F.data == "back")
 @dp.callback_query(TrackOrder.choose_order, F.data == "back")
 @dp.callback_query(CheckAvailability.start, F.data == "back")
+@dp.callback_query(Cart.start, F.data == "back")
 @dp.callback_query(CheckStatus.start, F.data == "back")
 @dp.callback_query(AskQuestion.start, F.data == "back")
 @dp.callback_query(CreateAccount.get_name_and_surname,
@@ -43,9 +48,10 @@ async def start_command(callback: types.CallbackQuery, state: FSMContext):
     get_contacts = InlineKeyboardButton(text="Контакты", callback_data="get contacts")
     check_status = InlineKeyboardButton(text="Узнать статус заказа", callback_data="check status")
     check_availability = InlineKeyboardButton(text="Узнать наличие", callback_data="check availability")
+    cart = InlineKeyboardButton(text="Корзина", callback_data="cart")
     ask_question = InlineKeyboardButton(text="Задать вопрос", callback_data="ask question")
 
-    authorised_buttons = [create_order_button, track_order_button, check_status, check_availability,
+    authorised_buttons = [create_order_button, track_order_button, check_status, check_availability, cart,
                           ask_question, get_contacts]
     for button in authorised_buttons:
         kb.add(button)
@@ -66,21 +72,22 @@ async def start_command(message: types.Message, state: FSMContext):
     get_contacts = InlineKeyboardButton(text="Контакты", callback_data="get contacts")
     check_status = InlineKeyboardButton(text="Узнать статус заказа", callback_data="check status")
     check_availability = InlineKeyboardButton(text="Узнать наличие", callback_data="check availability")
+    cart = InlineKeyboardButton(text="Корзина", callback_data="cart")
     ask_question = InlineKeyboardButton(text="Задать вопрос", callback_data="ask question")
 
-    authorised_buttons = [create_order_button, track_order_button, check_status, check_availability,
+    authorised_buttons = [create_order_button, track_order_button, check_status, check_availability, cart,
                           ask_question, get_contacts]
     for button in authorised_buttons:
         kb.add(button)
 
     kb.adjust(1)
     await message.answer(text='Привет, я бот магазина centrmag, выберите желаемое '
-                                       'действие', reply_markup=kb.as_markup())
+                              'действие', reply_markup=kb.as_markup())
 
 
-def create_kb():
+def create_kb(button_name="Назад"):
     kb = InlineKeyboardBuilder()
-    cancel_button = InlineKeyboardButton(text="Назад", callback_data=f'back')
+    cancel_button = InlineKeyboardButton(text=button_name, callback_data=f'back')
     kb.add(cancel_button)
     return kb
 
@@ -154,10 +161,89 @@ async def input_fio(callback: CallbackQuery, state: FSMContext):
 
 
 @dp.callback_query(F.data == "check availability")
-async def check_availability(callback: CallbackQuery, state: FSMContext):
+@dp.callback_query(CheckAvailability.choose_quantity, F.data == "resume searching")
+async def check_availability_start(callback: CallbackQuery, state: FSMContext):
     kb = create_kb()
-    await callback.message.answer("Введите артикул товара", reply_markup=kb.as_markup())
+    await callback.message.answer("Введите название товара", reply_markup=kb.as_markup())
     await state.set_state(CheckAvailability.start)
+
+
+@dp.message(CheckAvailability.start)
+async def check_availability_send_results(message: Message, state: FSMContext):
+    kb = create_kb()
+    item_name = message.text
+    res, stocks = get_stocks(item_name)
+    print(f'stocks: {stocks}')
+    if stocks is not None:
+        if stocks > 0:
+            caption = f"Товар <b>{item_name}</b>\nИмеется в количестве <b>{stocks} шт.</b>"
+            kb.add(
+                InlineKeyboardButton(text="Добавить в корзину", callback_data=f"add to cart|{res['Id']}|{stocks}|{res['cena']}")
+            )
+            kb.adjust(1)
+        else:
+            caption = f"В данный момент товара <b>{item_name}</b> на складе нет"
+        try:
+            await bot.send_photo(chat_id=message.from_user.id,
+                                 photo=f'https://www.centrmag.ru/catalog/{res["obl"]}',
+                                 caption=caption,
+                                 reply_markup=kb.as_markup())
+        except Exception as ex:
+            print(ex)
+            print(kb.export())
+            await message.answer(text=caption,
+                                 reply_markup=kb.as_markup())
+    else:
+        await message.answer(text="Товар не найден, попробуйте ввести название еще раз", reply_markup=kb.as_markup())
+
+
+@dp.callback_query(CheckAvailability.start, F.data.startswith("add to cart"))
+async def check_availability_add_to_cart(callback: CallbackQuery, state: FSMContext):
+    item_id = callback.data.split('|')[1]
+    stocks = callback.data.split('|')[2]
+
+    await state.update_data(item_id=item_id)
+    await state.update_data(item_name=get_item_name_by_id(item_id))
+    await state.update_data(stocks=stocks)
+
+    await callback.message.answer(text=f"Введите количество не более {stocks} шт.")
+    await state.set_state(CheckAvailability.add_to_cart)
+
+
+@dp.message(CheckAvailability.add_to_cart)
+async def check_availability_choose_quantity(message: Message, state: FSMContext):
+    data = await state.get_data()
+    if message.text.isdigit() and 0 < int(message.text) <= int(data['stocks']):
+        kb = InlineKeyboardBuilder()
+        kb.add(
+            InlineKeyboardButton(text="Продолжить поиск", callback_data="resume searching"),
+            InlineKeyboardButton(text="В корзину", callback_data="cart"),
+        )
+        kb.adjust(1)
+        user_cart.append(
+            {'item_id': data['item_id'],
+             'item_name': data['item_name'],
+             'item_quantity': int(message.text)
+             })
+        print(user_cart)
+        await message.answer(text=f"Товар <b>{data['item_name']}</b> добавлен в корзину в количестве <b>{message.text}</b> шт.",
+                             reply_markup=kb.as_markup())
+        await state.set_state(CheckAvailability.choose_quantity)
+    else:
+        await message.answer(text="Введите корректное число")
+
+
+@dp.callback_query(F.data == "cart")
+async def cart_start(callback: CallbackQuery, state: FSMContext):
+    kb = create_kb()
+    base_str = 'Ваша корзина:'
+    for item in user_cart:
+        base_str += f'\n<b>{item["item_name"]}</b> - <b>{item["item_quantity"]} шт</b>'
+    await callback.message.answer(text=base_str, reply_markup=kb.as_markup())
+    await state.set_state(Cart.start)
+
+
+
 
 
 @dp.callback_query(F.data == "how to search")
@@ -312,7 +398,8 @@ async def samovivoz(callback: CallbackQuery, state: FSMContext):
 @dp.callback_query(DeliveryMethods.delivery_methods, F.data == "1")
 async def pvz_i_postamaty(callback: CallbackQuery, state: FSMContext):
     kb = create_kb()
-    await callback.message.answer_photo(photo='https://imgur.com/a/LRsILZY', caption=pvz_text, reply_markup=kb.as_markup())
+    await callback.message.answer_photo(photo='https://imgur.com/a/LRsILZY', caption=pvz_text,
+                                        reply_markup=kb.as_markup())
     await state.set_state(DeliveryMethods.method)
 
 
@@ -327,7 +414,8 @@ async def kurierskaya(callback: CallbackQuery, state: FSMContext):
 @dp.callback_query(DeliveryMethods.delivery_methods, F.data == "3")
 async def beskontaktnaya_kurierskaya(callback: CallbackQuery, state: FSMContext):
     kb = create_kb()
-    await callback.message.answer(text=beskontaktnaya_kurierskaya_text, reply_markup=kb.as_markup(), parse_mode=ParseMode.HTML)
+    await callback.message.answer(text=beskontaktnaya_kurierskaya_text, reply_markup=kb.as_markup(),
+                                  parse_mode=ParseMode.HTML)
     await state.set_state(DeliveryMethods.method)
 
 
@@ -341,7 +429,8 @@ async def punkti_samovivoza(callback: CallbackQuery, state: FSMContext):
 @dp.callback_query(DeliveryMethods.delivery_methods, F.data == "5")
 async def kurierskaya_po_vsei_rossii(callback: CallbackQuery, state: FSMContext):
     kb = create_kb()
-    await callback.message.answer(text=kurierskaya_po_vsei_rossii_text, reply_markup=kb.as_markup(), parse_mode=ParseMode.HTML)
+    await callback.message.answer(text=kurierskaya_po_vsei_rossii_text, reply_markup=kb.as_markup(),
+                                  parse_mode=ParseMode.HTML)
     await state.set_state(DeliveryMethods.method)
 
 
@@ -384,21 +473,24 @@ async def cashless_payment(callback: CallbackQuery, state: FSMContext):
 @dp.callback_query(PaymentMethods.payment_methods, F.data == "2")
 async def transfer_to_bank_card(callback: CallbackQuery, state: FSMContext):
     kb = create_kb()
-    await callback.message.answer(text=transfer_to_bank_card_text, reply_markup=kb.as_markup(), parse_mode=ParseMode.HTML, )
+    await callback.message.answer(text=transfer_to_bank_card_text, reply_markup=kb.as_markup(),
+                                  parse_mode=ParseMode.HTML, )
     await state.set_state(PaymentMethods.method)
 
 
 @dp.callback_query(PaymentMethods.payment_methods, F.data == "3")
 async def transfer_to_e_wallet_card(callback: CallbackQuery, state: FSMContext):
     kb = create_kb()
-    await callback.message.answer(text=transfer_to_e_wallet_text, reply_markup=kb.as_markup(), parse_mode=ParseMode.HTML, )
+    await callback.message.answer(text=transfer_to_e_wallet_text, reply_markup=kb.as_markup(),
+                                  parse_mode=ParseMode.HTML, )
     await state.set_state(PaymentMethods.method)
 
 
 @dp.callback_query(PaymentMethods.payment_methods, F.data == "4")
 async def money_transfer_systems(callback: CallbackQuery, state: FSMContext):
     kb = create_kb()
-    await callback.message.answer(text=money_transfer_systems_text, reply_markup=kb.as_markup(), parse_mode=ParseMode.HTML, )
+    await callback.message.answer(text=money_transfer_systems_text, reply_markup=kb.as_markup(),
+                                  parse_mode=ParseMode.HTML, )
     await state.set_state(PaymentMethods.method)
 
 
@@ -450,9 +542,7 @@ async def how_to_choose_magazine(callback: CallbackQuery, state: FSMContext):
     # TODO
 
 
-
 async def main() -> None:
-    bot = Bot(TOKEN, parse_mode=ParseMode.HTML)
     await dp.start_polling(bot)
 
 
