@@ -44,7 +44,6 @@ async def start_command(callback: types.CallbackQuery, state: FSMContext):
     kb.adjust(1)
 
     create_order_button = InlineKeyboardButton(text="Создать заказ", callback_data="create order")
-    track_order_button = InlineKeyboardButton(text="Отследить заказ", callback_data="track order")
     get_contacts = InlineKeyboardButton(text="Контакты", callback_data="get contacts")
     check_status = InlineKeyboardButton(text="Узнать статус заказа", callback_data="check status")
     check_availability = InlineKeyboardButton(text="Узнать наличие", callback_data="check availability")
@@ -68,7 +67,6 @@ async def start_command(message: types.Message, state: FSMContext):
     kb.adjust(1)
 
     create_order_button = InlineKeyboardButton(text="Создать заказ", callback_data="create order")
-    track_order_button = InlineKeyboardButton(text="Отследить заказ", callback_data="track order")
     get_contacts = InlineKeyboardButton(text="Контакты", callback_data="get contacts")
     check_status = InlineKeyboardButton(text="Узнать статус заказа", callback_data="check status")
     check_availability = InlineKeyboardButton(text="Узнать наличие", callback_data="check availability")
