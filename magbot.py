@@ -28,6 +28,15 @@ dp = Dispatcher()
 bot = Bot(TOKEN, parse_mode=ParseMode.HTML)
 
 
+def check_auth(data, kb):
+    if not data['user_auth']:
+        auth_button = InlineKeyboardButton(text="Авторизоваться", callback_data="auth")
+        kb.add(auth_button)
+        kb.adjust(1)
+        return False
+    else:
+        return True
+
 @dp.callback_query(Login.input_login, F.data == "back")
 @dp.callback_query(MakeOrder.choose_product, F.data == "back")
 @dp.callback_query(TrackOrder.choose_order, F.data == "back")
@@ -142,10 +151,14 @@ async def create_order(callback: CallbackQuery, state: FSMContext):
 @dp.callback_query(F.data == "check status")
 async def check_status(callback: CallbackQuery, state: FSMContext):
     kb = create_kb()
-    await callback.message.answer(text="Укажите ФИО, на кого оформлен заказ",
+    data = await state.get_data()
+    if not check_auth(data, kb):
+        text = "Чтобы узнать статус заказа необходимо авторизоваться"
+    else:
+        text = "Введите номер заказа или выберите из списка ниже"
+    await callback.message.answer(text=text,
                                   reply_markup=kb.as_markup())
     await state.set_state(CheckStatus.start)
-
 
 
 @dp.callback_query(F.data == "check availability")
@@ -527,6 +540,7 @@ async def ask_question_start(callback: CallbackQuery, state: FSMContext):
 
 @dp.message(AskQuestion.start)
 async def ask_openai(message: Message, state: FSMContext):
+    print("yoo")
     question = message.text
     response = await get_openai_response(question)
     await message.answer(response)
