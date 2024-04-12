@@ -1,2 +1,2 @@
 HTTPS_PROXY = "http://user158636:zbpy4j@94.158.191.52:1413"
-OPENAI_API_KEY = "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"
+OPENAI_API_KEY = "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"

@@ -22,7 +22,7 @@ from texts import *
 
 # test - 6748840687:AAEah69Bw4LUvpc43bcGA_Hr19_u98TZiJo
 # production - 6565334685:AAFMrkMnbIAB_x8DjHx9494idO8N0qCcoAs
-TOKEN = '6565334685:AAFMrkMnbIAB_x8DjHx9494idO8N0qCcoAs'
+TOKEN = '6748840687:AAEah69Bw4LUvpc43bcGA_Hr19_u98TZiJo'
 
 dp = Dispatcher()
 bot = Bot(TOKEN, parse_mode=ParseMode.HTML)
@@ -31,11 +31,13 @@ bot = Bot(TOKEN, parse_mode=ParseMode.HTML)
 def check_auth(data, kb):
     if not data['user_auth']:
         auth_button = InlineKeyboardButton(text="Авторизоваться", callback_data="auth")
-        kb.add(auth_button)
+        reg_button = InlineKeyboardButton(text="Зарегистрироваться", callback_data="register")
+        kb.add(auth_button, reg_button)
         kb.adjust(1)
         return False
     else:
         return True
+
 
 @dp.callback_query(Login.input_login, F.data == "back")
 @dp.callback_query(MakeOrder.choose_product, F.data == "back")
@@ -149,7 +151,7 @@ async def create_order(callback: CallbackQuery, state: FSMContext):
 
 @dp.callback_query(CheckStatus.input_order_number, F.data == "back")
 @dp.callback_query(F.data == "check status")
-async def check_status(callback: CallbackQuery, state: FSMContext):
+async def check_status_start(callback: CallbackQuery, state: FSMContext):
     kb = create_kb()
     data = await state.get_data()
     if not check_auth(data, kb):
@@ -159,6 +161,52 @@ async def check_status(callback: CallbackQuery, state: FSMContext):
     await callback.message.answer(text=text,
                                   reply_markup=kb.as_markup())
     await state.set_state(CheckStatus.start)
+
+
+@dp.callback_query(CheckStatus.start, F.data == "register")
+async def check_status_input_fio(callback: CallbackQuery, state: FSMContext):
+    await callback.message.answer(text="Введите свои ФИО")
+    await state.set_state(CheckStatus.input_fio)
+
+
+@dp.message(CheckStatus.input_fio)
+async def check_status_input_email(message: Message, state: FSMContext):
+    if not all(char.isalpha() or char.isspace() for char in message.text):
+        await message.answer(text="Некорректный ввод введите ФИО еще раз")
+    else:
+        await state.update_data(fio=message.text)
+        await message.answer(text="Введите электронную почту")
+        await state.set_state(CheckStatus.input_email)
+
+
+def is_valid_email(email):
+    # Регулярное выражение для проверки email
+    pattern = r'^[\w\.-]+@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}$'
+    return re.match(pattern, email) is not None
+
+
+@dp.message(CheckStatus.input_email)
+async def check_status_input_email(message: Message, state: FSMContext):
+    if not is_valid_email(message.text):
+        await message.answer(text="Некорректный ввод почты, попробуйте еще раз")
+    else:
+        await state.update_data(email=message.text)
+        await message.answer(text="Введите пароль")
+        await state.set_state(CheckStatus.input_password)
+
+
+@dp.message(CheckStatus.input_password)
+async def check_status_input_password(message: Message, state: FSMContext):
+    await state.update_data(email=message.text)
+    await message.answer(text="Повторите пароль")
+    await state.set_state(CheckStatus.repeat_password)
+
+
+@dp.message(CheckStatus.repeat_password)
+async def check_status_input_password(message: Message, state: FSMContext):
+    await state.update_data(email=message.text)
+    await message.answer(text="Повторите пароль")
+
 
 
 @dp.callback_query(F.data == "check availability")
