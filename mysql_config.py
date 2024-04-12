@@ -1,5 +1,6 @@
-username = 'root'
-password = 'root'
-host = '127.0.0.1'
-database = 'db_centrmag6_2users'
+username = 'a0920044_mydb'
+password = 'geetmumeen'
+host = 'a0920044.xsph.ru'
+database = 'a0920044_mydb'
+
 
