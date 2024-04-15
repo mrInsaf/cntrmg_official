@@ -73,3 +73,41 @@ def get_zakaz_by_id(zakaz_id):
 
         }
     return rows[0]
+
+
+def register_user(user_id, username, password, fio, email):
+    try:
+        cursor.execute(
+            f"INSERT INTO users (id_user, nik, pass, fam, email, prava) "
+            f"VALUES ('{user_id}', '{username}', '{password}', '{fio}', '{email}', 'user')"
+        )
+        cnx.commit()
+        print("User added successfully.")
+        return True
+    except mysql.connector.Error as err:
+        print(f"Error: {err}")
+        return False
+
+
+def check_user_in_db(email):
+    cursor.execute(
+        f'select * from users where email = "{email}"'
+    )
+    rows = cursor.fetchall()
+    if len(rows) > 0 and len(rows[0]) > 0:
+        return True
+    else:
+        return False
+
+
+def check_password(email, password):
+    cursor.execute(
+        f'select pass from users where email = "{email}"'
+    )
+    rows = cursor.fetchall()
+    if len(rows) > 0 and len(rows[0]) > 0 and password == rows[0][0]:
+        return True
+    else:
+        return False
+
+

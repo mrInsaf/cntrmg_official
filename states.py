@@ -43,6 +43,11 @@ class CheckStatus(StatesGroup):
     input_order_number = State()
 
 
+class Auth(StatesGroup):
+    input_email = State()
+    input_password = State()
+
+
 class CheckAvailability(StatesGroup):
     start = State()
     add_to_cart = State()

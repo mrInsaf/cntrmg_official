@@ -22,7 +22,7 @@ from texts import *
 
 # test - 6748840687:AAEah69Bw4LUvpc43bcGA_Hr19_u98TZiJo
 # production - 6565334685:AAFMrkMnbIAB_x8DjHx9494idO8N0qCcoAs
-TOKEN = '6565334685:AAFMrkMnbIAB_x8DjHx9494idO8N0qCcoAs'
+TOKEN = '6748840687:AAEah69Bw4LUvpc43bcGA_Hr19_u98TZiJo'
 
 dp = Dispatcher()
 bot = Bot(TOKEN, parse_mode=ParseMode.HTML)
@@ -197,15 +197,62 @@ async def check_status_input_email(message: Message, state: FSMContext):
 
 @dp.message(CheckStatus.input_password)
 async def check_status_input_password(message: Message, state: FSMContext):
-    await state.update_data(email=message.text)
+    await state.update_data(password=message.text)
     await message.answer(text="Повторите пароль")
     await state.set_state(CheckStatus.repeat_password)
 
 
 @dp.message(CheckStatus.repeat_password)
-async def check_status_input_password(message: Message, state: FSMContext):
-    await state.update_data(email=message.text)
-    await message.answer(text="Повторите пароль")
+async def check_status_repeat_password(message: Message, state: FSMContext):
+    kb = create_kb()
+    kb.add(
+        InlineKeyboardButton(text="Авторизоваться", callback_data="auth")
+    )
+    kb.adjust(1)
+    data = await state.get_data()
+    password = data['password']
+    if password != message.text:
+        await message.answer(text="Пароли не совпадают, попробуйте еще раз")
+    else:
+        fio = data['fio']
+        email = data['email']
+        user_id = message.from_user.id
+        username = message.from_user.username
+        if register_user(user_id, username, password, fio, email):
+            await message.answer(text="Аккаунт создан, можете авторизоваться", reply_markup=kb.as_markup())
+        else:
+            await message.answer(text="Произошла ошибка")
+
+
+
+@dp.callback_query(F.data == "auth")
+async def auth_start(callback: CallbackQuery, state: FSMContext):
+    await callback.message.answer(text="Введите свой email")
+    await state.set_state(Auth.input_email)
+
+
+@dp.message(Auth.input_email)
+async def auth_start(message: Message, state: FSMContext):
+    email = message.text
+    if check_user_in_db(email):
+        await message.answer(text="Введите пароль")
+        await state.update_data(email=email)
+        await state.set_state(Auth.input_password)
+    else:
+        await message.answer(text="Пользователь с таким email не найден")
+
+
+@dp.message(Auth.input_password)
+async def auth_start(message: Message, state: FSMContext):
+    data = await state.get_data()
+    email = data['email']
+    password = message.text
+    if check_password(email, password):
+        await message.answer(text="Успешная авторизация")
+        await state.update_data(user_auth=True)
+    else:
+        await message.answer(text="Неверный пароль, попробуйте еще раз")
+
 
 
 
