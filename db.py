@@ -9,8 +9,7 @@ cursor = cnx.cursor()
 
 def get_res_by_item_name(item_name):
     cursor.execute(
-        "SELECT ost, nal, proizvodim, cena_str, Id, obl, cena FROM main WHERE ogl = %s",
-        (item_name,)
+        f"SELECT ost, nal, proizvodim, cena_str, Id, obl, cena, ogl FROM main WHERE ogl LIKE '%{item_name}%'"
     )
     rows = cursor.fetchall()
     result = []
@@ -23,6 +22,7 @@ def get_res_by_item_name(item_name):
             'Id': row[4],
             'obl': row[5],
             'cena': row[6],
+            'ogl': row[7],
         }
         result.append(row_dict)
     if len(result) != 0:
@@ -124,3 +124,42 @@ def create_order_db(zakaz, date, time, dost, city, street, house, email, id_user
     except mysql.connector.Error as err:
         print(f"Error: {err}")
         return False
+
+
+def select_orders_by_email(email):
+    cursor.execute(
+        f'select zakaz, data, time, Id, city, street, home from zakazy where email = "{email}"'
+    )
+    rows = cursor.fetchall()
+    order_items = []
+    for i, order in enumerate(rows):
+        zakaz = order[0]
+        items = zakaz.split('^')
+        order_items.append({'order_id': order[3], "zakaz": [], "data": "", "time": ""})
+        for item in items:
+            if len(item) == 0:
+                break
+            item_info = item.split(':')
+            item_id = item_info[0]
+            item_name = select_item_by_id(item_id)
+            quantity = item_info[1].split(';')[0]
+            summa = item_info[1].split(';')[1]
+            item_dict = {'item_id': item_id, 'item_name': item_name, 'quantity': quantity, 'summa': summa}
+            order_items[i]['zakaz'].append(item_dict)
+        order_items[i]['data'] = order[1]
+        order_items[i]['time'] = order[2]
+        order_items[i]['city'] = order[4]
+        order_items[i]['street'] = order[5]
+        order_items[i]['home'] = order[6]
+    return order_items
+
+
+def select_item_by_id(item_id):
+    cursor.execute(
+        f'select ogl from main where Id = "{item_id}"'
+    )
+    rows = cursor.fetchall()
+    return rows[0][0]
+
+#
+print(select_orders_by_email('mr.insaf@list.ru'))

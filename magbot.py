@@ -164,7 +164,7 @@ async def create_order(callback: CallbackQuery, state: FSMContext):
     await state.set_state(MakeOrder.choose_product)
 
 
-@dp.callback_query(CheckStatus.input_order_number, F.data == "back")
+@dp.callback_query(CheckStatus.choose_order, F.data == "back")
 @dp.callback_query(F.data == "check status")
 async def check_status_start(callback: CallbackQuery, state: FSMContext):
     kb = create_kb()
@@ -172,10 +172,66 @@ async def check_status_start(callback: CallbackQuery, state: FSMContext):
     if not check_auth(data, kb):
         text = "Чтобы узнать статус заказа необходимо авторизоваться"
     else:
-        text = "Введите номер заказа или выберите из списка ниже"
+        text = "Выберите заказ из списка ниже"
+        orders = select_orders_by_email(data['email'])
+        print(orders)
+        await state.update_data(orders=orders)
+        for order in orders:
+            button_text = ""
+            order_id = order['order_id']
+            button_text += str(order_id)
+            button_text += '. '
+            button_text += order['data']
+            button_text += ' '
+            button_text += order['time']
+            kb.add(InlineKeyboardButton(text=button_text, callback_data=f"order|{order_id}"))
+        kb.adjust(1)
     await callback.message.answer(text=text,
                                   reply_markup=kb.as_markup())
     await state.set_state(CheckStatus.start)
+
+
+@dp.callback_query(CheckStatus.start)
+async def check_status_choose_order(callback: CallbackQuery, state: FSMContext):
+    kb = create_kb()
+    order_id = callback.data.split('|')[1]
+    data = await state.get_data()
+    orders = data['orders']
+    order = find_order_by_id(order_id, orders)
+    order_details = get_order_details_as_string(order)
+
+    await callback.message.answer(text=order_details, reply_markup=kb.as_markup())
+    await state.set_state(CheckStatus.choose_order)
+
+
+def find_order_by_id(order_id, orders_list):
+    for order in orders_list:
+        if order['order_id'] == int(order_id):
+            return order
+    return None
+
+
+def get_order_details_as_string(order):
+    order_info = f"<b>Информация о заказе №{order['order_id']}</b>: \n"
+    order_info += f"<b>Статус</b>: Новый\n"
+    order_info += f"<b>Дата</b>: {order['data']}\n"
+    order_info += f"<b>Время</b>: {order['time']}\n"
+    order_info += f"<b>Адрес</b>: г. {order['city']}, ул. {order['street']} {order['home']}\n"
+    order_info += "<b>Товары в заказе</b>:\n"
+    order_info += "-------------------------\n"
+    total_sum = 0  # Инициализация переменной для подсчета итоговой суммы
+    for item in order['zakaz']:
+        order_info += f"- <b>Наименование</b>: {item['item_name']}\n"
+        order_info += f"  <b>Артикул</b>: {item['item_id']}\n"
+        order_info += f"  <b>Количество</b>: {item['quantity']}\n"
+        order_info += f"  <b>Сумма</b>: {item['summa']} руб.\n"
+        total_sum += int(item['summa'])  # Добавление суммы товара к общей сумме
+        order_info += "-------------------------\n"
+    order_info += f"<b>Итого</b>: {total_sum} руб.\n"  # Добавление информации об итоговой сумме
+    return order_info
+
+
+
 
 
 @dp.callback_query(F.data == "register")
@@ -272,6 +328,7 @@ async def auth_input_password(message: Message, state: FSMContext):
 
 @dp.callback_query(F.data == "check availability")
 @dp.callback_query(CheckAvailability.choose_quantity, F.data == "resume searching")
+@dp.callback_query(CheckAvailability.pzc, F.data == "back")
 async def check_availability_start(callback: CallbackQuery, state: FSMContext):
     kb = create_kb()
     await callback.message.answer("Введите название товара", reply_markup=kb.as_markup())
@@ -288,14 +345,14 @@ async def check_availability_send_results(message: Message, state: FSMContext):
     await state.set_state(CheckAvailability.pzc)
     if stocks is not None:
         if stocks > 0:
-            caption = f"Товар <b>{item_name}</b>\nИмеется в количестве <b>{stocks} шт.</b>\nЦена: <b>{res['cena']} рублей за шт.</b>"
+            caption = f"Товар <b>{res['ogl']}</b>\nИмеется в количестве <b>{stocks} шт.</b>\nЦена: <b>{res['cena']} рублей за шт.</b>"
             kb.add(
                 InlineKeyboardButton(text="Добавить в корзину",
                                      callback_data=f"add to cart|{res['Id']}|{stocks}|{res['cena']}")
             )
             kb.adjust(1)
         else:
-            caption = f"В данный момент товара <b>{item_name}</b> на складе нет"
+            caption = f"В данный момент товара <b>{res['ogl']}</b> на складе нет"
         try:
             await bot.send_photo(chat_id=message.from_user.id,
                                  photo=f'https://www.centrmag.ru/catalog/{res["obl"]}',
@@ -303,7 +360,6 @@ async def check_availability_send_results(message: Message, state: FSMContext):
                                  reply_markup=kb.as_markup())
         except Exception as ex:
             print(ex)
-            print(kb.export())
             await message.answer(text=caption,
                                  reply_markup=kb.as_markup())
     else:
@@ -320,14 +376,14 @@ async def check_availability_back_to_send_results(callback: CallbackQuery, state
     await state.set_state(CheckAvailability.pzc)
     if stocks is not None:
         if stocks > 0:
-            caption = f"Товар <b>{item_name}</b>\nИмеется в количестве <b>{stocks} шт.</b>\nЦена: <b>{res['cena']} рублей за шт.</b>"
+            caption = f"Товар <b>{res['ogl']}</b>\nИмеется в количестве <b>{stocks} шт.</b>\nЦена: <b>{res['cena']} рублей за шт.</b>"
             kb.add(
                 InlineKeyboardButton(text="Добавить в корзину",
                                      callback_data=f"add to cart|{res['Id']}|{stocks}|{res['cena']}")
             )
             kb.adjust(1)
         else:
-            caption = f"В данный момент товара <b>{item_name}</b> на складе нет"
+            caption = f"В данный момент товара <b>{res['ogl']}</b> на складе нет"
         try:
             print(f"yooooooo {callback.message.from_user.id}")
             await bot.send_photo(chat_id=callback.message.from_user.id,
@@ -336,7 +392,6 @@ async def check_availability_back_to_send_results(callback: CallbackQuery, state
                                  reply_markup=kb.as_markup())
         except Exception as ex:
             print(ex)
-            print(kb.export())
             await callback.message.answer(text=caption,
                                  reply_markup=kb.as_markup())
     else:
@@ -800,15 +855,12 @@ async def payment_terminal(callback: CallbackQuery, state: FSMContext):
 async def ask_question_start(callback: CallbackQuery, state: FSMContext):
     kb = create_kb()
     kb.add(
-        InlineKeyboardButton(text="Как отследить заказ", callback_data="how to order"),
         InlineKeyboardButton(text="Как найти товар", callback_data="how to search"),
-        InlineKeyboardButton(text="Как выбрать нужный журнал", callback_data="how to choose magazine"),
         InlineKeyboardButton(text="Какая стоимость журнала", callback_data="price of magazine"),
         InlineKeyboardButton(text="Способы оплаты", callback_data="payment methods"),
         InlineKeyboardButton(text="График работы / Адрес", callback_data="grafik raboty"),
         InlineKeyboardButton(text="Как добраться", callback_data="how to get"),
         InlineKeyboardButton(text="Способы доставки", callback_data="delivery methods"),
-        InlineKeyboardButton(text="Задать другой вопрос", callback_data="ask another question"),
     )
     kb.adjust(1)
     await callback.message.answer(text="Введите свой вопрос или выберите из списка", reply_markup=kb.as_markup())
@@ -818,9 +870,10 @@ async def ask_question_start(callback: CallbackQuery, state: FSMContext):
 @dp.message(AskQuestion.start)
 async def ask_openai(message: Message, state: FSMContext):
     print("yoo")
+    kb = create_kb()
     question = message.text
     response = await get_openai_response(question)
-    await message.answer(response)
+    await message.answer(text=response, reply_markup=kb.as_markup())
 
 
 @dp.callback_query(F.data == "how to order")

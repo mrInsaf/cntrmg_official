@@ -36,6 +36,7 @@ class TrackOrder(StatesGroup):
 
 class CheckStatus(StatesGroup):
     start = State()
+    choose_order = State()
     input_fio = State()
     input_email = State()
     input_password = State()
