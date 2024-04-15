@@ -52,6 +52,9 @@ class CheckAvailability(StatesGroup):
     start = State()
     add_to_cart = State()
     choose_quantity = State()
+    pzc = State()
+    you_sure = State()
+    not_correct_number = State()
 
 
 class HowToSearch(StatesGroup):
@@ -74,6 +77,7 @@ class PaymentMethods(StatesGroup):
 
 class Cart(StatesGroup):
     start = State()
+    checkout_start = State()
 
 
 class Misc(StatesGroup):

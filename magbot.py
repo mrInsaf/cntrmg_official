@@ -46,20 +46,28 @@ def check_auth(data, kb):
 @dp.callback_query(Cart.start, F.data == "back")
 @dp.callback_query(CheckStatus.start, F.data == "back")
 @dp.callback_query(AskQuestion.start, F.data == "back")
+@dp.callback_query(Auth.input_password, F.data == "back")
 @dp.callback_query(CreateAccount.get_name_and_surname,
                    F.data == "back")
 async def start_command(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
+    kb = InlineKeyboardBuilder()
     try:
         print(data['user_cart'])
         print(data['user_auth'])
+        check_auth(data, kb)
     except Exception as ex:
         print("Создал новую корзину")
         await state.update_data(user_cart=[])
         await state.update_data(user_auth=False)
+        auth_button = InlineKeyboardButton(text="Авторизоваться", callback_data="auth")
+        reg_button = InlineKeyboardButton(text="Зарегистрироваться", callback_data="register")
+        kb.add(auth_button, reg_button)
+        kb.adjust(1)
+
 
     await state.set_state(StartState.start_state)
-    kb = InlineKeyboardBuilder()
+
     kb.adjust(1)
 
     create_order_button = InlineKeyboardButton(text="Посмотреть каталог", callback_data="create order")
@@ -70,10 +78,9 @@ async def start_command(callback: types.CallbackQuery, state: FSMContext):
     ask_question = InlineKeyboardButton(text="Задать вопрос", callback_data="ask question")
 
     authorised_buttons = [create_order_button, check_status, check_availability, cart,
-                          ask_question, get_contacts]
+                          ask_question, get_contacts, ]
     for button in authorised_buttons:
         kb.add(button)
-
     kb.adjust(1)
     await callback.message.answer(text='Привет, я бот магазина centrmag, выберите желаемое '
                                        'действие', reply_markup=kb.as_markup())
@@ -81,18 +88,23 @@ async def start_command(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.message(Command('start'))
 async def start_command(message: types.Message, state: FSMContext):
+    kb = InlineKeyboardBuilder()
+    kb.adjust(1)
     data = await state.get_data()
     try:
         print(data['user_cart'])
         print(data['user_auth'])
+        check_auth(data, kb)
     except Exception as ex:
         print("Создал новую корзину")
         await state.update_data(user_cart=[])
         await state.update_data(user_auth=False)
+        auth_button = InlineKeyboardButton(text="Авторизоваться", callback_data="auth")
+        reg_button = InlineKeyboardButton(text="Зарегистрироваться", callback_data="register")
+        kb.add(auth_button, reg_button)
+        kb.adjust(1)
 
     await state.set_state(StartState.start_state)
-    kb = InlineKeyboardBuilder()
-    kb.adjust(1)
 
     create_order_button = InlineKeyboardButton(text="Посмотреть каталог", callback_data="create order")
     get_contacts = InlineKeyboardButton(text="Контакты", callback_data="get contacts")
@@ -103,6 +115,7 @@ async def start_command(message: types.Message, state: FSMContext):
 
     authorised_buttons = [create_order_button, check_status, check_availability, cart,
                           ask_question, get_contacts]
+
     for button in authorised_buttons:
         kb.add(button)
 
@@ -163,7 +176,7 @@ async def check_status_start(callback: CallbackQuery, state: FSMContext):
     await state.set_state(CheckStatus.start)
 
 
-@dp.callback_query(CheckStatus.start, F.data == "register")
+@dp.callback_query(F.data == "register")
 async def check_status_input_fio(callback: CallbackQuery, state: FSMContext):
     await callback.message.answer(text="Введите свои ФИО")
     await state.set_state(CheckStatus.input_fio)
@@ -224,7 +237,6 @@ async def check_status_repeat_password(message: Message, state: FSMContext):
             await message.answer(text="Произошла ошибка")
 
 
-
 @dp.callback_query(F.data == "auth")
 async def auth_start(callback: CallbackQuery, state: FSMContext):
     await callback.message.answer(text="Введите свой email")
@@ -243,17 +255,16 @@ async def auth_start(message: Message, state: FSMContext):
 
 
 @dp.message(Auth.input_password)
-async def auth_start(message: Message, state: FSMContext):
+async def auth_input_password(message: Message, state: FSMContext):
+    kb = create_kb("На главную")
     data = await state.get_data()
     email = data['email']
     password = message.text
     if check_password(email, password):
-        await message.answer(text="Успешная авторизация")
+        await message.answer(text="Успешная авторизация", reply_markup=kb.as_markup())
         await state.update_data(user_auth=True)
     else:
         await message.answer(text="Неверный пароль, попробуйте еще раз")
-
-
 
 
 @dp.callback_query(F.data == "check availability")
@@ -268,13 +279,16 @@ async def check_availability_start(callback: CallbackQuery, state: FSMContext):
 async def check_availability_send_results(message: Message, state: FSMContext):
     kb = create_kb()
     item_name = message.text
+    await state.update_data(item_name=item_name)
     res, stocks = get_stocks(item_name)
     print(f'stocks: {stocks}')
+    await state.set_state(CheckAvailability.pzc)
     if stocks is not None:
         if stocks > 0:
-            caption = f"Товар <b>{item_name}</b>\nИмеется в количестве <b>{stocks} шт.</b>"
+            caption = f"Товар <b>{item_name}</b>\nИмеется в количестве <b>{stocks} шт.</b>\nЦена: <b>{res['cena']} рублей за шт.</b>"
             kb.add(
-                InlineKeyboardButton(text="Добавить в корзину", callback_data=f"add to cart|{res['Id']}|{stocks}|{res['cena']}")
+                InlineKeyboardButton(text="Добавить в корзину",
+                                     callback_data=f"add to cart|{res['Id']}|{stocks}|{res['cena']}")
             )
             kb.adjust(1)
         else:
@@ -293,44 +307,110 @@ async def check_availability_send_results(message: Message, state: FSMContext):
         await message.answer(text="Товар не найден, попробуйте ввести название еще раз", reply_markup=kb.as_markup())
 
 
-@dp.callback_query(CheckAvailability.start, F.data.startswith("add to cart"))
+@dp.callback_query(CheckAvailability.add_to_cart, F.data == "back")
+async def check_availability_back_to_send_results(callback: CallbackQuery, state: FSMContext):
+    kb = create_kb()
+    data = await state.get_data()
+    item_name = data['item_name']
+    res, stocks = get_stocks(item_name)
+    print(f'stocks: {stocks}')
+    await state.set_state(CheckAvailability.pzc)
+    if stocks is not None:
+        if stocks > 0:
+            caption = f"Товар <b>{item_name}</b>\nИмеется в количестве <b>{stocks} шт.</b>\nЦена: <b>{res['cena']} рублей за шт.</b>"
+            kb.add(
+                InlineKeyboardButton(text="Добавить в корзину",
+                                     callback_data=f"add to cart|{res['Id']}|{stocks}|{res['cena']}")
+            )
+            kb.adjust(1)
+        else:
+            caption = f"В данный момент товара <b>{item_name}</b> на складе нет"
+        try:
+            print(f"yooooooo {callback.message.from_user.id}")
+            await bot.send_photo(chat_id=callback.message.from_user.id,
+                                 photo=f'https://www.centrmag.ru/catalog/{res["obl"]}',
+                                 caption=caption,
+                                 reply_markup=kb.as_markup())
+        except Exception as ex:
+            print(ex)
+            print(kb.export())
+            await callback.message.answer(text=caption,
+                                 reply_markup=kb.as_markup())
+    else:
+        await callback.message.answer(text="Товар не найден, попробуйте ввести название еще раз", reply_markup=kb.as_markup())
+
+
+@dp.callback_query(CheckAvailability.pzc, F.data.startswith("add to cart"))
+@dp.callback_query(CheckAvailability.you_sure, F.data == "back")
+@dp.callback_query(CheckAvailability.not_correct_number, F.data == "back")
 async def check_availability_add_to_cart(callback: CallbackQuery, state: FSMContext):
-    item_id = callback.data.split('|')[1]
-    stocks = callback.data.split('|')[2]
+    kb = create_kb()
+    if callback.data != "back":
+        item_id = callback.data.split('|')[1]
+        stocks = callback.data.split('|')[2]
+        cena = callback.data.split('|')[3]
 
-    await state.update_data(item_id=item_id)
-    await state.update_data(item_name=get_item_name_by_id(item_id))
-    await state.update_data(stocks=stocks)
+        await state.update_data(item_id=item_id)
+        await state.update_data(item_name=get_item_name_by_id(item_id))
+        await state.update_data(stocks=stocks)
+        await state.update_data(cena=cena)
+    else:
+        data = await state.get_data()
+        stocks = data['stocks']
 
-    await callback.message.answer(text=f"Введите количество не более {stocks} шт.")
+    await callback.message.answer(text=f"Введите количество не более {stocks} шт.", reply_markup=kb.as_markup())
     await state.set_state(CheckAvailability.add_to_cart)
 
 
 @dp.message(CheckAvailability.add_to_cart)
 async def check_availability_choose_quantity(message: Message, state: FSMContext):
     data = await state.get_data()
+    cena = data['cena']
+    quantity = message.text
+    await state.update_data(quantity=quantity)
+    kb = create_kb()
     if message.text.isdigit() and 0 < int(message.text) <= int(data['stocks']):
-        kb = InlineKeyboardBuilder()
+        summa = int(cena) * int(quantity)
+        await state.update_data(summa=summa)
+
         kb.add(
-            InlineKeyboardButton(text="Продолжить поиск", callback_data="resume searching"),
-            InlineKeyboardButton(text="В корзину", callback_data="cart"),
+            InlineKeyboardButton(text="Добавить в корзину", callback_data="complete adding to cart")
         )
         kb.adjust(1)
-
-        data['user_cart'].append(
-            {'item_id': data['item_id'],
-             'item_name': data['item_name'],
-             'item_quantity': int(message.text)
-             })
-        updated_cart = data['user_cart']
-        await state.update_data(user_cart=updated_cart)
-        data_2 = await state.get_data()
-        print(data_2['user_cart'])
-        await message.answer(text=f"Товар <b>{data['item_name']}</b> добавлен в корзину в количестве <b>{message.text}</b> шт.",
-                             reply_markup=kb.as_markup())
-        await state.set_state(CheckAvailability.choose_quantity)
+        await message.answer(
+            text=f"Товар <b>{data['item_name']}</b>\nв количестве <b>{quantity}</b> шт.\nбудет стоить <b>{summa}</b> рублей",
+            reply_markup=kb.as_markup()
+        )
+        await state.set_state(CheckAvailability.you_sure)
     else:
-        await message.answer(text="Введите корректное число")
+        await message.answer(text="Введите корректное число", reply_markup=kb.as_markup())
+        await state.set_state(CheckAvailability.not_correct_number)
+
+
+@dp.callback_query(CheckAvailability.you_sure)
+async def check_availability_choose_quantity(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    kb = InlineKeyboardBuilder()
+    kb.add(
+        InlineKeyboardButton(text="Продолжить поиск", callback_data="resume searching"),
+        InlineKeyboardButton(text="В корзину", callback_data="cart"),
+    )
+    kb.adjust(1)
+
+    data['user_cart'].append(
+        {'item_id': data['item_id'],
+         'item_name': data['item_name'],
+         'item_quantity': data['quantity'],
+         'summa': data['summa']
+         })
+    updated_cart = data['user_cart']
+    await state.update_data(user_cart=updated_cart)
+    data_2 = await state.get_data()
+    print(data_2['user_cart'])
+    await callback.message.answer(
+        text=f"Товар <b>{data['item_name']}</b> добавлен в корзину в количестве <b>{data['quantity']}</b> шт.",
+        reply_markup=kb.as_markup())
+    await state.set_state(CheckAvailability.choose_quantity)
 
 
 @dp.callback_query(F.data == "cart")
@@ -340,19 +420,22 @@ async def cart_start(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     user_cart = data['user_cart']
 
-    for item in user_cart:
-        base_str += f'\n<b>{item["item_name"]}</b> - <b>{item["item_quantity"]} шт</b>'
-
     if not data['user_auth']:
         auth_button = InlineKeyboardButton(text="Авторизоваться", callback_data="auth")
         kb.add(auth_button)
         kb.adjust(1)
         base_str += "\n Чтобы оформить заказ необходима авторизация"
+    else:
+        kb.add(InlineKeyboardButton(text="Оформить заказ", callback_data="checkout"))
+        for item in user_cart:
+            base_str += f'\n<b>{item["item_name"]}</b> - <b>{item["item_quantity"]} шт</b> за <b>{item["summa"]} рублей</b>'
 
     await callback.message.answer(text=base_str, reply_markup=kb.as_markup())
     await state.set_state(Cart.start)
 
 
+@dp.callback_query(Cart.start, F.data == "checkout")
+async def cart_checkout_start(callback: CallbackQuery, state: FSMContext):
 
 
 
