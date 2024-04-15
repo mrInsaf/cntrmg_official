@@ -871,10 +871,25 @@ async def ask_question_start(callback: CallbackQuery, state: FSMContext):
 async def ask_openai(message: Message, state: FSMContext):
     print("yoo")
     kb = create_kb()
+    kb.add(InlineKeyboardButton(text="Вызвать менеджера", callback_data="call manager"))
+    kb.adjust(1)
     question = message.text
     response = await get_openai_response(question)
     await message.answer(text=response, reply_markup=kb.as_markup())
 
+
+@dp.callback_query(F.data == "call manager")
+async def ask_question_call_manager(callback: CallbackQuery, state: FSMContext):
+    await callback.message.answer(text="Напишите вопрос менеджеру")
+    await state.set_state(AskQuestion.call_manager)
+
+
+@dp.message(AskQuestion.call_manager)
+async def ask_openai(message: Message, state: FSMContext):
+    data = await state.get_data()
+    await message.answer(text="Направил этот вопрос менеджеру, пожалуйста, ожидайте")
+    text = f"Новый вопрос от пользователя {message.from_user.username}\nПочта {data['email']}\nВопрос: {message.text}"
+    await bot.send_message(chat_id=816831722, text=text)
 
 @dp.callback_query(F.data == "how to order")
 async def how_to_order_start(callback: CallbackQuery, state: FSMContext):

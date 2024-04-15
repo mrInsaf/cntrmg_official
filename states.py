@@ -92,3 +92,4 @@ class Misc(StatesGroup):
 
 class AskQuestion(StatesGroup):
     start = State()
+    call_manager = State()
