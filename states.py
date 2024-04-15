@@ -77,7 +77,12 @@ class PaymentMethods(StatesGroup):
 
 class Cart(StatesGroup):
     start = State()
-    checkout_start = State()
+    input_city = State()
+    input_street = State()
+    input_house = State()
+    final = State()
+    pay = State()
+
 
 
 class Misc(StatesGroup):

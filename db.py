@@ -111,3 +111,16 @@ def check_password(email, password):
         return False
 
 
+
+def create_order_db(zakaz, date, time, dost, city, street, house, email, id_user):
+    try:
+        cursor.execute(
+            f"INSERT INTO zakazy (zakaz, data, time, dost, city, street, home, email, id_user) "
+            f"VALUES ('{zakaz}', '{date}', '{time}', '{dost}', '{city}', '{street}', '{house}', '{email}', '{id_user}')"
+        )
+        cnx.commit()
+        print("заказ добавлен")
+        return True
+    except mysql.connector.Error as err:
+        print(f"Error: {err}")
+        return False

@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import logging
 import re
 import sys
@@ -47,6 +48,7 @@ def check_auth(data, kb):
 @dp.callback_query(CheckStatus.start, F.data == "back")
 @dp.callback_query(AskQuestion.start, F.data == "back")
 @dp.callback_query(Auth.input_password, F.data == "back")
+@dp.callback_query(Cart.pay, F.data == "back")
 @dp.callback_query(CreateAccount.get_name_and_surname,
                    F.data == "back")
 async def start_command(callback: types.CallbackQuery, state: FSMContext):
@@ -263,6 +265,7 @@ async def auth_input_password(message: Message, state: FSMContext):
     if check_password(email, password):
         await message.answer(text="Успешная авторизация", reply_markup=kb.as_markup())
         await state.update_data(user_auth=True)
+        await state.update_data(email=email)
     else:
         await message.answer(text="Неверный пароль, попробуйте еще раз")
 
@@ -414,11 +417,24 @@ async def check_availability_choose_quantity(callback: CallbackQuery, state: FSM
 
 
 @dp.callback_query(F.data == "cart")
+@dp.callback_query(Cart.input_city, F.data == "back")
 async def cart_start(callback: CallbackQuery, state: FSMContext):
     kb = create_kb()
     base_str = 'Ваша корзина:'
     data = await state.get_data()
     user_cart = data['user_cart']
+    total = 0
+
+    # # ТЕСТОВАЯ ТЕМА!!!
+    # data['user_cart'].append(
+    #     {'item_id': "00-01016729",
+    #      'item_name': 'Патронный нагреватель 6 мм, 220 В (6 х 40 мм, 80 Вт)',
+    #      'item_quantity': "3",
+    #      'summa': "3000"
+    #      })
+    # updated_cart = data['user_cart']
+    # await state.update_data(user_cart=updated_cart)
+    # # ТЕСТОВАЯ ТЕМА!!!
 
     if not data['user_auth']:
         auth_button = InlineKeyboardButton(text="Авторизоваться", callback_data="auth")
@@ -426,17 +442,100 @@ async def cart_start(callback: CallbackQuery, state: FSMContext):
         kb.adjust(1)
         base_str += "\n Чтобы оформить заказ необходима авторизация"
     else:
-        kb.add(InlineKeyboardButton(text="Оформить заказ", callback_data="checkout"))
         for item in user_cart:
+            total += int(item['summa'])
             base_str += f'\n<b>{item["item_name"]}</b> - <b>{item["item_quantity"]} шт</b> за <b>{item["summa"]} рублей</b>'
-
+        base_str += f"\n\nВсего <b>{total}</b> рублей"
+        if total != 0:
+            kb.add(InlineKeyboardButton(text="Оформить заказ", callback_data="checkout"))
+            kb.adjust(1)
+        await state.update_data(total=total)
     await callback.message.answer(text=base_str, reply_markup=kb.as_markup())
     await state.set_state(Cart.start)
 
 
 @dp.callback_query(Cart.start, F.data == "checkout")
+@dp.callback_query(Cart.input_street, F.data == "back")
 async def cart_checkout_start(callback: CallbackQuery, state: FSMContext):
+    kb = create_kb()
+    await callback.message.answer(text="Введите город доставки", reply_markup=kb.as_markup())
+    await state.set_state(Cart.input_city)
 
+
+@dp.message(Cart.input_city)
+async def cart_checkout_input_street(message: Message, state: FSMContext):
+    kb = create_kb()
+    city = message.text
+    await state.update_data(city=city)
+    await message.answer(text=f"Город: <b>{city}\n</b>Введите улицу доставки", reply_markup=kb.as_markup())
+    await state.set_state(Cart.input_street)
+
+
+@dp.callback_query(Cart.input_house)
+async def cart_checkout_back_to_input_street(callback: Message, state: FSMContext):
+    kb = create_kb()
+    data = await state.get_data()
+    city = data['city']
+    await callback.message.answer(text=f"Город: <b>{city}\n</b>Введите улицу доставки", reply_markup=kb.as_markup())
+    await state.set_state(Cart.input_street)
+
+
+@dp.message(Cart.input_street)
+async def cart_checkout_input_house(message: Message, state: FSMContext):
+    data = await state.get_data()
+    city = data['city']
+    kb = create_kb()
+    street = message.text
+    await state.update_data(street=street)
+    await message.answer(text=f"Город: <b>{city}</b>\nУлица: <b>{street}</b>\nВведите дом доставки", reply_markup=kb.as_markup())
+    await state.set_state(Cart.input_house)
+
+
+@dp.callback_query(Cart.final, F.data == "back")
+async def cart_checkout_back_to_input_house(callback: Message, state: FSMContext):
+    kb = create_kb()
+    data = await state.get_data()
+    city = data['city']
+    street = data['street']
+    await callback.message.answer(text=f"Город: <b>{city}</b>\nУлица: <b>{street}</b>\nВведите дом доставки", reply_markup=kb.as_markup())
+    await state.set_state(Cart.input_house)
+
+
+@dp.message(Cart.input_house)
+async def cart_checkout_final(message: Message, state: FSMContext):
+    data = await state.get_data()
+    city = data['city']
+    street = data['street']
+    house = message.text
+    kb = create_kb()
+    kb.add(InlineKeyboardButton(text="Оплатить заказ", callback_data="pay"))
+    await state.update_data(house=house)
+    await message.answer(text=f"Город: <b>{city}</b>\nУлица: <b>{street}</b>\nДом: <b>{house}</b>\nВсе ли верно?", reply_markup=kb.as_markup())
+    await state.set_state(Cart.final)
+
+
+@dp.callback_query(Cart.final, F.data == "pay")
+async def cart_checkout_pay(callback: CallbackQuery, state: FSMContext):
+    kb = create_kb("На главную")
+    data = await state.get_data()
+    result_zakaz = ""
+    user_cart = data['user_cart']
+    for item in user_cart:
+        result_zakaz += str(item["item_id"]) + ':'
+        result_zakaz += str(item["item_quantity"]) + ';'
+        result_zakaz += str(item["summa"]) + '^'
+    current_date = datetime.datetime.now().strftime('%d-%m-%Y')
+    current_time = datetime.datetime.now().time()
+    dost = "Курьер"
+    city = data['city']
+    street = data['street']
+    house = data['house']
+    email = data['email']
+    id_user = callback.from_user.id
+    create_order_db(result_zakaz, current_date, current_time, dost, city, street, house, email, id_user)
+    print(result_zakaz, current_date, current_time)
+    await callback.message.answer(text="Заказ успешно оформлен", reply_markup=kb.as_markup())
+    await state.set_state(Cart.pay)
 
 
 @dp.callback_query(F.data == "how to search")
